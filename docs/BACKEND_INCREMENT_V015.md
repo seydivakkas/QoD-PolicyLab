@@ -1,0 +1,7 @@
+# Backend v0.1.5 — Explicit cancel and bounded lease renewal (DRAFT/HOLD)
+
+- Added `Session.cancel(t, request_id)` for pending or active requests. Cancellation is idempotent, references the current request ID, makes later GRANT callbacks inert, and starts causal cooldown. It does not backdate service termination or create artificial gains.
+- Added `Session.renew(t, request_id, token, extension_s, max_renewals)` with unique renewal tokens, bounded number of extensions, strictly limited extension duration and rejection after expiry. A renewal is an **abstract authorized synthetic event**, **not** a real provider lease update.
+- `simulation.run(..., renew_before_s=..., max_renewals=..., cancel_when_absent=True)` is opt-in. It records renewal/cancel events per tick, bills a modeled request fee per successful renewal, and preserves default run behavior.
+- Local tests cover cancel pending/active, late callbacks, stale renewal, budget, exact expiry, and simulation integration.
+- **Open acceptance blockers:** modeled provider ACK/NACK for renewal, asynchronous event-order stress and retry backoff/retry accounting, policy calibration using development-only synthetic traces and locked held-out seeds, Pareto confidence/negative controls, packaging/licenses/resource bounds and full backend acceptance. Real telecom traces LAST.

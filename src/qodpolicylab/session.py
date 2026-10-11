@@ -19,6 +19,9 @@ class Session:
     timeouts:int=0
     service_unavailable:int=0
     _resolved_ids:set[int]=field(default_factory=set,repr=False)
+    _cancelled_ids:set[int]=field(default_factory=set,repr=False)
+    _renewal_tokens:set[str]=field(default_factory=set,repr=False)
+    renewals:int=0
     active_seconds:float=0.
     pending_at:float|None=None
     timeout_at:float|None=None
@@ -126,6 +129,61 @@ class Session:
         self.pending_at = None
         self.timeout_at = None
         self.pending_failure = None
+        return 'APPLIED'
+
+    def cancel(self, t: float, request_id: int) -> str:
+        """Explicit user/policy cancel with causal cooldown; no resurrection.
+
+        Timers at or before ``t`` are processed before cancellation. An ACTIVE
+        interval must not receive QoD gain after the effective cancellation.
+        """
+        if type(request_id) is not int or request_id <= 0:
+            raise ValueError('CANCEL_INVALID_REQUEST_ID')
+        self.advance(t)
+        if request_id in self._cancelled_ids:
+            return 'IGNORED_DUPLICATE'
+        if request_id != self.request_id:
+            return 'IGNORED_STALE'
+        if self.state not in ('REQUESTING','ACTIVE'):
+            return 'IGNORED_INACTIVE'
+        self._cancelled_ids.add(request_id)
+        self._resolved_ids.add(request_id)
+        self.pending_at = None
+        self.timeout_at = None
+        self.pending_failure = None
+        self.pending_grant = False
+        self.active_until = None
+        self.cooldown_until = t + self.cfg.cooldown_s
+        self._event(t, 'CANCEL', 'COOLDOWN')
+        return 'APPLIED'
+
+    def renew(self, t: float, request_id: int, *, token: str,
+              extension_s: float, max_renewals: int = 2) -> str:
+        """Bounded idempotent lease extension, no retroactive active time.
+
+        Provider renewal *authorization* is modeled as an already-supplied
+        success; real callback/rejection, request billing and retries remain
+        separate unimplemented operator integration details.
+        """
+        if type(request_id) is not int or request_id <= 0:
+            raise ValueError('RENEW_INVALID_REQUEST_ID')
+        if not isinstance(token, str) or not 1 <= len(token) <= 128:
+            raise ValueError('RENEW_INVALID_TOKEN')
+        if isinstance(extension_s,bool) or not isinstance(extension_s,(int,float)) or not math.isfinite(extension_s) or not 0 < extension_s <= self.cfg.lease_s:
+            raise ValueError('RENEW_INVALID_EXTENSION')
+        if type(max_renewals) is not int or not 1 <= max_renewals <= 100:
+            raise ValueError('RENEW_INVALID_BUDGET')
+        self.advance(t)
+        if token in self._renewal_tokens:
+            return 'IGNORED_DUPLICATE'
+        if request_id != self.request_id or self.state != 'ACTIVE':
+            return 'IGNORED_STALE'
+        if self.renewals >= max_renewals:
+            return 'BUDGET_EXHAUSTED'
+        self._renewal_tokens.add(token)
+        self.renewals += 1
+        self.active_until += extension_s
+        self._event(t, 'RENEW', 'ACTIVE')
         return 'APPLIED'
 
     def account_active(self, tick_s):

@@ -21,7 +21,8 @@ def quantile(values,q):
     return float(s[lo]+(s[hi]-s[lo])*(k-lo))
 
 
-def run(trace, cfg:Config, policy, *, callback_delay_s=None, request_timeout_s=None, max_requests=None):
+def run(trace, cfg:Config, policy, *, callback_delay_s=None, request_timeout_s=None,
+        max_requests=None, cancel_when_absent=False, renew_before_s=None, max_renewals=2):
     if policy not in POLICIES:raise ValueError('invalid policy')
     external=callback_delay_s is not None
     if external:
@@ -33,6 +34,13 @@ def run(trace, cfg:Config, policy, *, callback_delay_s=None, request_timeout_s=N
         raise ValueError('request_timeout_s requires callback_delay_s')
     if max_requests is not None and (type(max_requests) is not int or max_requests < 1):
         raise ValueError('max_requests must be a positive integer')
+    if type(cancel_when_absent) is not bool:
+        raise ValueError('cancel_when_absent must be boolean')
+    if renew_before_s is not None:
+        if isinstance(renew_before_s,bool) or not isinstance(renew_before_s,(int,float)) or not math.isfinite(renew_before_s) or not 0 < renew_before_s < cfg.lease_s:
+            raise ValueError('renew_before_s must be between zero and lease_s')
+        if type(max_renewals) is not int or max_renewals < 1:
+            raise ValueError('max_renewals must be positive integer')
     session=Session(cfg,auto_provider=not external,request_timeout_s=request_timeout_s)
     queue=ProviderEventQueue() if external else None
     rows=[];last=-math.inf
@@ -42,6 +50,17 @@ def run(trace, cfg:Config, policy, *, callback_delay_s=None, request_timeout_s=N
         if external:
             queue.deliver_through(obs.t_s,session)
         session.advance(obs.t_s)
+        renewal=False
+        cancelled=False
+        if session.state=='ACTIVE' and cancel_when_absent and not obs.target_present:
+            cancelled=session.cancel(obs.t_s,session.request_id)=='APPLIED'
+        if (session.state=='ACTIVE' and renew_before_s is not None and
+                obs.target_present and obs.approaching and
+                session.active_until is not None and
+                0 < session.active_until-obs.t_s <= renew_before_s):
+            renewal=session.renew(obs.t_s,session.request_id,
+                                   token=f'synthetic-renewal-{k}',
+                                   extension_s=cfg.lease_s,max_renewals=max_renewals)=='APPLIED'
         request=False
         if session.state=='OBSERVE':
             request=decide(policy,obs.observable(),cfg)
@@ -66,17 +85,18 @@ def run(trace, cfg:Config, policy, *, callback_delay_s=None, request_timeout_s=N
                                if active and session.active_until is not None else cfg.tick_s)
         rows.append({'t_s':obs.t_s,'baseline_latency_ms':obs.latency_ms,'latency_ms':latency_ms,
                      'jitter_ms':jitter_ms,'deadline_ms':obs.deadline_ms,'eligible':eligible,
-                     'miss':miss,'state':session.state,'request':request,'active':active})
+                     'miss':miss,'state':session.state,'request':request,'active':active,
+                     'renewal':renewal,'cancelled':cancelled})
     eligible_count=sum(v['eligible'] for v in rows)
     misses=sum(v['miss'] for v in rows)
-    service=session.requests*cfg.request_fee_units+session.active_seconds*cfg.active_second_units
+    service=(session.requests+session.renewals)*cfg.request_fee_units+session.active_seconds*cfg.active_second_units
     result={'schema_version':'1.0','model':'hypothetical QoD; not actual 5G service','policy':policy,'seed':cfg.seed,
             'ticks':len(rows),'p50_latency_ms':quantile([r['latency_ms'] for r in rows],.5),
             'p95_latency_ms':quantile([r['latency_ms'] for r in rows],.95),
             'p99_latency_ms':quantile([r['latency_ms'] for r in rows],.99),
             'eligible_deadline_events':eligible_count,'deadline_misses':misses,
             'deadline_miss_rate':misses/eligible_count if eligible_count else None,
-            'request_count':session.requests,'accept_count':session.accepts,
+            'request_count':session.requests,'renewal_count':session.renewals,'accept_count':session.accepts,
             'rejection_count':session.rejects,'timeout_count':session.timeouts,'service_unavailable_count':session.service_unavailable,
             'active_time_s':session.active_seconds,'service_cost_units':service,
             'utility_loss_units':service+misses*cfg.deadline_miss_penalty_units,
