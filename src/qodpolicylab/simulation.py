@@ -7,6 +7,7 @@ from .models import Config
 from .policies import decide
 from .session import Session
 from .scenario import generate
+from .stats import paired_bootstrap
 
 POLICIES=('best_effort','static','adaptive')
 
@@ -75,7 +76,7 @@ def compare(cfg:Config, seeds=30):
         trial['adaptive_minus_static_misses']=scores['adaptive']['deadline_misses']-scores['static']['deadline_misses']
         trials.append(trial)
     return {'schema_version':'1.0','seed_start':cfg.seed,'seed_count':seeds,'policies':POLICIES,
-            'paired_trials':trials,'summary':{
+            'paired_trials':trials,'paired_bootstrap_misses':{name:paired_bootstrap([v[name] for v in trials],seed=cfg.seed) for name in ('adaptive_minus_be_misses','adaptive_minus_static_misses')} if seeds>=2 else None,'summary':{
                 policy:{'average_miss_rate':mean(v[policy+'_miss_rate'] for v in trials if v[policy+'_miss_rate'] is not None),
                         'average_service_cost_units':mean(v[policy+'_service_cost_units'] for v in trials)}
                 for policy in POLICIES},'claim':'synthetic paired descriptive comparison; not measured operator QoD'}

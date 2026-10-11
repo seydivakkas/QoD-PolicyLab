@@ -33,3 +33,7 @@ py -m qodpolicylab report --run runs/paired
 - Windows CI execution is not verified until GitHub Actions run after push; distribution license not selected.
 
 **Status:** executable backend foundation, module-level automated tests passed locally; full backend gate and independent real-data acceptance remain **HOLD**.
+
+## Statistical and negative-control extensions
+
+`stats.py` now performs deterministic **paired scenario-seed** bootstrap intervals, not per-tick resampling. `experiments.py` defines a fixed baseline/no-effect/no-grant/timeout/guaranteed-grant/slow-setup negative-control sweep. Run `python -m qodpolicylab sweep --config examples/demo_config.json --seeds 30 --out runs/sweep`. Bootstrap intervals are exploratory and do not constitute locked scientific acceptance or real provider measurements.

@@ -9,6 +9,7 @@ from .models import Config
 from .scenario import generate,read_trace,write_trace
 from .simulation import run,compare,POLICIES
 from .report import render_report
+from .experiments import sweep
 
 
 def save(path,data):
@@ -34,6 +35,7 @@ def main(argv=None):
     g=sp.add_parser('generate');g.add_argument('--config');g.add_argument('--seed',type=int);g.add_argument('--out',required=True)
     s=sp.add_parser('simulate');s.add_argument('--config');s.add_argument('--trace',required=True);s.add_argument('--policy',choices=POLICIES,required=True);s.add_argument('--out',required=True)
     c=sp.add_parser('compare');c.add_argument('--config');c.add_argument('--seeds',type=int,default=30);c.add_argument('--out',required=True)
+    sw=sp.add_parser('sweep');sw.add_argument('--config');sw.add_argument('--seeds',type=int,default=30);sw.add_argument('--out',required=True)
     r=sp.add_parser('report');r.add_argument('--run',required=True);r.add_argument('--out')
     args=p.parse_args(argv)
     if args.cmd=='report':
@@ -52,6 +54,10 @@ def main(argv=None):
             w=csv.DictWriter(f,fieldnames=list(rows[0]));w.writeheader();w.writerows(rows)
         manifest(out,['metrics.json','sessions.json','network_realization.csv','config.json'])
         answer={'output':str(out),'policy':args.policy,'requests':res['request_count']}
+    elif args.cmd=='sweep':
+        res=sweep(cfg,args.seeds);save(out/'sweep.json',res);save(out/'config.json',asdict(cfg))
+        manifest(out,['sweep.json','config.json'])
+        answer={'output':str(out),'profiles':len(res['profiles']),'seeds':args.seeds}
     else:
         res=compare(cfg,args.seeds);trials=res.pop('paired_trials')
         save(out/'metrics.json',res);save(out/'config.json',asdict(cfg))
