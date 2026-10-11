@@ -2,7 +2,7 @@
 
 **A reproducible, offline-first decision-policy simulator for on-demand quality-of-service (QoD) activation under deadline, latency, reliability and cost constraints.**
 
-> **Status: DESIGN / README-FIRST.** The repository is a specification for an independent simulator. No operator integration, commercial 5G QoS entitlement, measured network improvement, production authorization or passing tests are claimed. The example CLI calls below are future interface contracts, **not working commands yet**.
+> **Status (feature/backend-v0.1): runnable offline simulator backend, not a real 5G QoD service or validated provider integration.** Synthetic policy replay, tests and audit reports are implemented. Full backend acceptance and frontend remain **HOLD**. See [`docs/BACKEND_V010.md`](docs/BACKEND_V010.md).
 
 ## 1. Why QoD-PolicyLab?
 
@@ -328,17 +328,19 @@ QoD-PolicyLab/
 └── .github/workflows/ci.yml
 ```
 
-## 14. Planned CLI examples — **not executable today**
+## 14. Working backend v0.1 CLI (hypothetical QoD only)
 
 ```powershell
-# These commands become valid only after the associated implementation lands.
-py -m qodpolicylab generate --config examples/burst.json --seed 42 --out runs/trace
-py -m qodpolicylab simulate --trace runs/trace/scenario.jsonl --policy adaptive --out runs/adaptive
-py -m qodpolicylab compare --config examples/comparison.json --seeds 30 --out runs/comparison
-py -m qodpolicylab report --run runs/comparison --format html
+py -m pip install -e .
+py -m unittest discover -s tests -v
+py -m qodpolicylab generate --config examples/demo_config.json --seed 42 --out runs/trace
+py -m qodpolicylab simulate --config examples/demo_config.json --trace runs/trace/scenario.jsonl --policy adaptive --out runs/adaptive
+py -m qodpolicylab compare --config examples/demo_config.json --seeds 30 --out runs/comparison
+py -m qodpolicylab sweep --config examples/demo_config.json --seeds 30 --out runs/sweep
+py -m qodpolicylab report --run runs/comparison
 ```
 
-Record `scenario.jsonl`, `sessions.jsonl`, `decisions.jsonl`, `network_realization.csv`, `metrics.json`, `paired_trials.csv`, `run_config.json`, `report.html` and a checksum manifest in versioned run folders. Outputs must distinguish hypothetical model results from observed measurements.
+Implemented outputs include `scenario.jsonl`, `sessions.json`, `network_realization.csv`, `metrics.json`, `paired_trials.csv`, `report.html` and checksum manifests. These are simulated events and costs, **not measured network benefits**. The previous nested design config has been superseded by the flat `1.0` schema in `examples/demo_config.json`.
 
 ## 15. Implementation choices, safety and release constraints
 
