@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "seed": 42,
+  "duration_s": 60.0,
+  "tick_s": 0.1,
+  "accept_probability": 0.8,
+  "setup_delay_s": 1.0,
+  "lease_s": 10.0,
+  "cooldown_s": 5.0,
+  "qod_latency_factor": 0.67,
+  "qod_jitter_factor": 0.8,
+  "request_fee_units": 1.0,
+  "active_second_units": 0.2,
+  "deadline_miss_penalty_units": 3.0,
+  "static_threshold": 0.6,
+  "adaptive_gate": 0.15
+}
