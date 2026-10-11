@@ -21,7 +21,7 @@ def quantile(values,q):
     return float(s[lo]+(s[hi]-s[lo])*(k-lo))
 
 
-def run(trace, cfg:Config, policy, *, callback_delay_s=None, request_timeout_s=None):
+def run(trace, cfg:Config, policy, *, callback_delay_s=None, request_timeout_s=None, max_requests=None):
     if policy not in POLICIES:raise ValueError('invalid policy')
     external=callback_delay_s is not None
     if external:
@@ -31,6 +31,8 @@ def run(trace, cfg:Config, policy, *, callback_delay_s=None, request_timeout_s=N
             raise ValueError('async mode needs finite nonnegative delay and positive timeout')
     elif request_timeout_s is not None:
         raise ValueError('request_timeout_s requires callback_delay_s')
+    if max_requests is not None and (type(max_requests) is not int or max_requests < 1):
+        raise ValueError('max_requests must be a positive integer')
     session=Session(cfg,auto_provider=not external,request_timeout_s=request_timeout_s)
     queue=ProviderEventQueue() if external else None
     rows=[];last=-math.inf
@@ -43,6 +45,8 @@ def run(trace, cfg:Config, policy, *, callback_delay_s=None, request_timeout_s=N
         request=False
         if session.state=='OBSERVE':
             request=decide(policy,obs.observable(),cfg)
+            if request and max_requests is not None and session.requests >= max_requests:
+                request=False
             if request:
                 session.request(obs.t_s,obs.provider_u)
                 if external:
@@ -58,7 +62,8 @@ def run(trace, cfg:Config, policy, *, callback_delay_s=None, request_timeout_s=N
         eligible=obs.target_present and obs.approaching
         miss=bool(eligible and latency_ms>obs.deadline_ms)
         # Tick duration is deterministic per config; no provider time is backdated.
-        session.account_active(cfg.tick_s)
+        session.account_active(min(cfg.tick_s,max(0.,session.active_until-obs.t_s))
+                               if active and session.active_until is not None else cfg.tick_s)
         rows.append({'t_s':obs.t_s,'baseline_latency_ms':obs.latency_ms,'latency_ms':latency_ms,
                      'jitter_ms':jitter_ms,'deadline_ms':obs.deadline_ms,'eligible':eligible,
                      'miss':miss,'state':session.state,'request':request,'active':active})
@@ -80,6 +85,8 @@ def run(trace, cfg:Config, policy, *, callback_delay_s=None, request_timeout_s=N
         result['callback_audit']=queue.audit
         result['undelivered_callbacks']=queue.pending_count()
         result['async_model']={'callback_delay_s':callback_delay_s,'request_timeout_s':request_timeout_s}
+    if max_requests is not None:
+        result['request_budget']={'max_requests':max_requests, 'exhausted':session.requests>=max_requests}
     return result
 
 

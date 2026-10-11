@@ -11,6 +11,7 @@ class Session:
     auto_provider:bool=True
     request_timeout_s:float|None=None
     state:str='IDLE'
+    _clock_s:float|None=field(default=None,repr=False)
     request_id:int=0
     requests:int=0
     accepts:int=0
@@ -32,23 +33,45 @@ class Session:
         self.state=state
 
     def advance(self,t):
-        """Process expired timers before decision, with no backdated benefit."""
-        if self.state=='IDLE':self._event(t,'START','OBSERVE')
-        if self.state=='REQUESTING':
-            if self.auto_provider and t+1e-9>=self.pending_at:
-                outcome='GRANT' if self.pending_grant else (self.pending_failure or 'REJECT')
-                self.provider_callback(t, self.request_id, outcome)
-            elif not self.auto_provider and self.timeout_at is not None and t+1e-9>=self.timeout_at:
-                # Apply at the timeout instant, not the next coarse simulation tick.
-                self.provider_callback(self.timeout_at,self.request_id,'TIMEOUT')
-        if self.state=='ACTIVE' and t+1e-9>=self.active_until:
-            self._event(t,'LEASE_EXPIRED','COOLDOWN')
-            self.cooldown_until=t+self.cfg.cooldown_s
-        if self.state=='FAILED':
-            self._event(t,'FAILURE_FALLBACK','COOLDOWN')
-            self.cooldown_until=t+self.cfg.cooldown_s
-        if self.state=='COOLDOWN' and t+1e-9>=self.cooldown_until:
-            self._event(t,'COOLDOWN_END','OBSERVE')
+        """Advance causally and timestamp timer transitions at their deadlines.
+
+        Coarse observation steps must not shift a lease expiry or cooldown.
+        Callbacks after the timeout are stale, regardless of tick resolution.
+        """
+        if not math.isfinite(t) or t < 0:
+            raise ValueError('session clock must be finite and nonnegative')
+        if self._clock_s is not None and t < self._clock_s - 1e-9:
+            raise ValueError('session clock cannot move backwards')
+        if self.state == 'IDLE':
+            self._event(t,'START','OBSERVE')
+        # Each iteration consumes one state transition, with no temporal jumps.
+        for _ in range(8):
+            if self.state == 'REQUESTING':
+                if self.auto_provider and self.pending_at is not None and t+1e-9 >= self.pending_at:
+                    at=self.pending_at
+                    outcome='GRANT' if self.pending_grant else (self.pending_failure or 'REJECT')
+                    self.provider_callback(at,self.request_id,outcome)
+                    continue
+                if not self.auto_provider and self.timeout_at is not None and t+1e-9 >= self.timeout_at:
+                    self.provider_callback(self.timeout_at,self.request_id,'TIMEOUT')
+                    continue
+            if self.state == 'ACTIVE' and self.active_until is not None and t+1e-9 >= self.active_until:
+                at=self.active_until
+                self._event(at,'LEASE_EXPIRED','COOLDOWN')
+                self.cooldown_until=at+self.cfg.cooldown_s
+                continue
+            if self.state == 'FAILED':
+                at=self.events[-1]['t_s']
+                self._event(at,'FAILURE_FALLBACK','COOLDOWN')
+                self.cooldown_until=at+self.cfg.cooldown_s
+                continue
+            if self.state == 'COOLDOWN' and self.cooldown_until is not None and t+1e-9 >= self.cooldown_until:
+                self._event(self.cooldown_until,'COOLDOWN_END','OBSERVE')
+                continue
+            break
+        else:
+            raise RuntimeError('session timer did not converge')
+        self._clock_s=t
 
     def request(self,t,provider_u):
         if self.state!='OBSERVE':raise ValueError('request only allowed from OBSERVE')
@@ -106,4 +129,6 @@ class Session:
         return 'APPLIED'
 
     def account_active(self, tick_s):
+        if not math.isfinite(tick_s) or tick_s < 0:
+            raise ValueError('active accounting time must be finite and nonnegative')
         if self.state=='ACTIVE':self.active_seconds+=tick_s
