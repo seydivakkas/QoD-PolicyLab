@@ -7,9 +7,10 @@ from .simulation import compare
 PROFILES={
     'baseline':{},
     'no_qod_effect':{'qod_latency_factor':1.,'qod_jitter_factor':1.},
-    'always_rejected':{'accept_probability':0.,'provider_timeout_probability':0.},
-    'all_timeouts':{'accept_probability':0.,'provider_timeout_probability':1.},
-    'always_granted':{'accept_probability':1.,'provider_timeout_probability':0.},
+    'always_rejected':{'accept_probability':0.,'provider_timeout_probability':0.,'provider_service_unavailable_probability':0.},
+    'all_timeouts':{'accept_probability':0.,'provider_timeout_probability':1.,'provider_service_unavailable_probability':0.},
+    'all_service_unavailable':{'accept_probability':0.,'provider_timeout_probability':0.,'provider_service_unavailable_probability':1.},
+    'always_granted':{'accept_probability':1.,'provider_timeout_probability':0.,'provider_service_unavailable_probability':0.},
     'slow_setup':{'setup_delay_s':3.},
 }
 

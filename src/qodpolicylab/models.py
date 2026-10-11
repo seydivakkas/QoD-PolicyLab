@@ -67,6 +67,7 @@ class Config:
     lease_s:float=10.
     cooldown_s:float=5.
     provider_timeout_probability:float=0.
+    provider_service_unavailable_probability:float=0.
     qod_latency_factor:float=.67
     qod_jitter_factor:float=.8
     request_fee_units:float=1.
@@ -80,11 +81,11 @@ class Config:
         if isinstance(self.seed,bool) or not isinstance(self.seed,int) or self.seed<0:raise ValueError('seed must be a nonnegative integer')
         for name in ('duration_s','tick_s','setup_delay_s','lease_s','cooldown_s','request_fee_units','active_second_units','deadline_miss_penalty_units'):
             number(getattr(self,name),name,lower=(1e-12 if name in ('duration_s','tick_s','lease_s') else 0.))
-        for name in ('accept_probability','provider_timeout_probability','qod_latency_factor','qod_jitter_factor','static_threshold','adaptive_gate'):
+        for name in ('accept_probability','provider_timeout_probability','provider_service_unavailable_probability','qod_latency_factor','qod_jitter_factor','static_threshold','adaptive_gate'):
             number(getattr(self,name),name,upper=1.,lower=(1e-12 if name.startswith('qod_') else 0.))
         if self.duration_s/self.tick_s > 100000: raise ValueError('too many simulated ticks')
-        if self.accept_probability+self.provider_timeout_probability > 1+1e-12:
-            raise ValueError('accept + timeout probabilities must be <= 1')
+        if self.accept_probability+self.provider_timeout_probability+self.provider_service_unavailable_probability > 1+1e-12:
+            raise ValueError('accept + timeout + unavailable probabilities must be <= 1')
 
     @classmethod
     def from_dict(cls, d):

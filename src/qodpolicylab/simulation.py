@@ -53,7 +53,7 @@ def run(trace, cfg:Config, policy):
             'eligible_deadline_events':eligible_count,'deadline_misses':misses,
             'deadline_miss_rate':misses/eligible_count if eligible_count else None,
             'request_count':session.requests,'accept_count':session.accepts,
-            'rejection_count':session.rejects,'timeout_count':session.timeouts,
+            'rejection_count':session.rejects,'timeout_count':session.timeouts,'service_unavailable_count':session.service_unavailable,
             'active_time_s':session.active_seconds,'service_cost_units':service,
             'utility_loss_units':service+misses*cfg.deadline_miss_penalty_units,
             'rows':rows,'sessions':session.events}
