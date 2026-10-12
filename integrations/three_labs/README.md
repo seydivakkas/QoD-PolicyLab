@@ -2,27 +2,25 @@
 
 The three research repos remain independent. This directory is only a bridging **prototype**; it is not a verified backend acceptance system, automotive controller, or 5G API client.
 
-## Offline install (Windows PowerShell)
+## Installation and development (Windows PowerShell)
 
-Install a compatible local Python 3.11+ and the checked-out branch of each repository, then from this folder:
+Clone the three repositories as sibling directories under one `Projects` folder. From `Projects`:
 
 ```powershell
-py -m pip install -e ..\..\KalmanTrackLab -e ..\..\BEV-MotionLab -e ..\..\QoD-PolicyLab scipy fastapi uvicorn
-py run_pipeline.py --frames 120 --out synthetic-demo.jsonl
-py server.py
+py -m pip install -e ./KalmanTrackLab -e ./BEV-MotionLab -e ./QoD-PolicyLab fastapi uvicorn
+py ./QoD-PolicyLab/integrations/three_labs/run_pipeline.py --frames 120 --out synthetic-demo.jsonl
+py ./QoD-PolicyLab/integrations/three_labs/server.py
 ```
 
-The repository checkout paths above are illustrative: adjust to your actual folder layout. Install all dependencies ahead of time; then the demo itself needs no remote inference/API.
-
-For the browser in a separate terminal:
+Use a second terminal:
 
 ```powershell
-cd frontend
+cd ./QoD-PolicyLab/integrations/three_labs/frontend
 npm install
 npm run dev
 ```
 
-View http://127.0.0.1:5173. WebSocket connects to 127.0.0.1:8787, localhost only. For local usage set `THREE_LABS_WS_TOKEN` to a random secret and pass it in the client URL if needed; no secret is built into the sample. The UI control sliders are experimental runtime overrides; do **not** use these settings as proof of frozen acceptance. The frontend intentionally shows `BACKEND HOLD`.
+UI: http://127.0.0.1:5173; localhost WebSocket: 127.0.0.1:8787. The application requires no network provider or subscription while running. The initial Python/Node dependency installation may require internet unless wheel/npm caches are provided. Windows packaging is NOT yet an offline installer. No user-provided video has been tested. `THREE_LABS_WS_TOKEN` is an optional local-only extra guard; a client passing that secret through a query URL must be configured explicitly.
 
 ## Canonical stream contract
 
