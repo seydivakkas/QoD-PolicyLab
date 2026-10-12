@@ -1,0 +1,9 @@
+{
+  "backend_v1_decision": "HOLD",
+  "protocol": "QOD-SYNTH-HOLDOUT-v1-20261012",
+  "schema_version": "1.0",
+  "sha256": {
+    "holdout.json": "9346c929c2cdea6587dd05131d52f4e18af6d5f65cfa46a560551780c1d1b8f0"
+  },
+  "source": "SYNTHETIC_ONLY"
+}
