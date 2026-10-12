@@ -9,6 +9,7 @@ from .session import Session
 from .scenario import generate
 from .stats import paired_bootstrap
 from .event_driver import ProviderEventQueue
+from .retry_policy import RetryConfig, RetryGuard
 
 POLICIES=('best_effort','static','adaptive')
 
@@ -22,7 +23,8 @@ def quantile(values,q):
 
 
 def run(trace, cfg:Config, policy, *, callback_delay_s=None, request_timeout_s=None,
-        max_requests=None, cancel_when_absent=False, renew_before_s=None, max_renewals=2):
+        max_requests=None, cancel_when_absent=False, renew_before_s=None, max_renewals=2,
+        retry_config: RetryConfig | None = None):
     if policy not in POLICIES:raise ValueError('invalid policy')
     external=callback_delay_s is not None
     if external:
@@ -41,6 +43,9 @@ def run(trace, cfg:Config, policy, *, callback_delay_s=None, request_timeout_s=N
             raise ValueError('renew_before_s must be between zero and lease_s')
         if type(max_renewals) is not int or max_renewals < 1:
             raise ValueError('max_renewals must be positive integer')
+    if retry_config is not None and not isinstance(retry_config, RetryConfig):
+        raise ValueError('retry_config must be RetryConfig')
+    retry_guard=RetryGuard(retry_config) if retry_config is not None else None
     session=Session(cfg,auto_provider=not external,request_timeout_s=request_timeout_s)
     queue=ProviderEventQueue() if external else None
     rows=[];last=-math.inf
@@ -50,6 +55,7 @@ def run(trace, cfg:Config, policy, *, callback_delay_s=None, request_timeout_s=N
         if external:
             queue.deliver_through(obs.t_s,session)
         session.advance(obs.t_s)
+        if retry_guard is not None: retry_guard.observe(session)
         renewal=False
         cancelled=False
         if session.state=='ACTIVE' and cancel_when_absent and not obs.target_present:
@@ -65,6 +71,8 @@ def run(trace, cfg:Config, policy, *, callback_delay_s=None, request_timeout_s=N
         if session.state=='OBSERVE':
             request=decide(policy,obs.observable(),cfg)
             if request and max_requests is not None and session.requests >= max_requests:
+                request=False
+            if request and retry_guard is not None and not retry_guard.allowed(session,obs.t_s):
                 request=False
             if request:
                 session.request(obs.t_s,obs.provider_u)
@@ -105,6 +113,9 @@ def run(trace, cfg:Config, policy, *, callback_delay_s=None, request_timeout_s=N
         result['callback_audit']=queue.audit
         result['undelivered_callbacks']=queue.pending_count()
         result['async_model']={'callback_delay_s':callback_delay_s,'request_timeout_s':request_timeout_s}
+    if retry_guard is not None:
+        retry_guard.observe(session)
+        result['retry_policy']=retry_guard.snapshot(session)
     if max_requests is not None:
         result['request_budget']={'max_requests':max_requests, 'exhausted':session.requests>=max_requests}
     return result
