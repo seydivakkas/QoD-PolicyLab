@@ -3,7 +3,6 @@ No real network activation and no real automotive emergency intervention.
 """
 from __future__ import annotations
 import json,sys,math
-import numpy as np
 from .ttc_policy import compute_ttc_with_uncertainty,qos_decision
 
 
@@ -22,8 +21,8 @@ def main():
             for tr in ev['tracks']:
                 if not tr['valid']:
                     tracks.append({**tr,'ttc':None,'action':'WITHHELD_INVALID_PROJECTION'});continue
-                p=tr['projection'];r=np.array([32-p['x_m'],p['y_m']*-1])
-                v=np.negative(np.asarray(tr['velocity_mps'],float))
+                p=tr['projection'];r=[32-p['x_m'],-p['y_m']]
+                v=[-float(tr['velocity_mps'][0]),-float(tr['velocity_mps'][1])]
                 ttc=compute_ttc_with_uncertainty(r,v,p['covariance_m2'],tr['velocity_covariance'])
                 action=qos_decision(ttc,latency_p99_ms=300,setup_delay_s=.3,headroom_s=.3,
                                     active=active,service_cost_units=1.,miss_penalty_units=3.)
